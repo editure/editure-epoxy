@@ -22,7 +22,6 @@
 
     // Epoxy namespace:
     var Epoxy = Backbone.Epoxy = {};
-    Epoxy._uid=0;
 
     // Object-type utils:
     var array = Array.prototype;
@@ -42,7 +41,7 @@
             extend = extend || {};
 
             for (var i in this.prototype) {
-                if (this.prototype.hasOwnProperty(i) && i !== 'constructor' && i !== 'bindings' ) {
+                if (this.prototype.hasOwnProperty(i) && i !== 'constructor') {
                     extend[i] = this.prototype[i];
                 }
             }
@@ -59,7 +58,9 @@
     // -----------
     var modelMap;
     var modelProps = ['computeds'];
-    var modelProto = {
+
+    Epoxy.Model = Backbone.Model.extend({
+        _super: Backbone.Model,
 
         // Backbone.Model constructor override:
         // configures computed model attributes around the underlying native Backbone model.
@@ -145,8 +146,7 @@
         toJSON: function(options) {
             var json = _super(this, 'toJSON', arguments);
 
-            // backbone-relational will sometimes return undefined json when catching relation recursion
-            if (json && options && options.computed) {
+            if (options && options.computed) {
                 _.each(this.c(), function(computed, attribute) {
                     json[ attribute ] = computed.value;
                 });
@@ -299,16 +299,7 @@
             }
             return null;
         }
-    }
-
-    Epoxy.RebaseModel = function( BackboneModelSuper ) {
-        if ( new BackboneModelSuper() instanceof Backbone.Model ){
-            modelProto._super = BackboneModelSuper;
-            return BackboneModelSuper.extend( modelProto, mixins);
-        }
-    }
-
-    Epoxy.Model = Epoxy.RebaseModel( Backbone.Model );
+    }, mixins);
 
     // Epoxy.Model -> Private
     // ----------------------
@@ -621,7 +612,6 @@
                 var view;
                 var views = this.v;
                 var ItemView = this.view.itemView;
-                var itemViewModel = this.view.itemViewModel || {};
                 var models = collection.models;
 
                 // Cache and reset the current dependency graph state:
@@ -634,12 +624,6 @@
                 // during init (or failure), the binding will reset.
                 target = target || collection;
 
-                // prep payload to pass to child views
-                var itemOptions = {};
-                if ( itemViewModel ) {
-                    itemOptions.viewModel = itemViewModel;
-                }
-
                 if (isModel(target)) {
 
                     // ADD/REMOVE Event (from a Model):
@@ -647,8 +631,7 @@
                     if (!views.hasOwnProperty(target.cid)) {
 
                         // Add new view:
-                        views[ target.cid ] = view = new ItemView( _.extend({model:target}, itemOptions));
-
+                        views[ target.cid ] = view = new ItemView({model: target});
                         var index = _.indexOf(models, target);
                         var $children = $element.children();
 
@@ -690,7 +673,7 @@
                         // Reset with new views:
                         this.clean();
                         collection.each(function(model) {
-                            views[ model.cid ] = view = new ItemView(_.extend({model: model}, itemOptions));
+                            views[ model.cid ] = view = new ItemView({model: model});
                             frag.appendChild(view.el);
                         });
                     }
@@ -989,8 +972,9 @@
     // ----------
     var viewMap;
     var viewProps = ['viewModel', 'bindings', 'bindingFilters', 'bindingHandlers', 'bindingSources', 'computeds'];
-    var viewProto =  {
 
+    Epoxy.View = Backbone.View.extend({
+        _super: Backbone.View,
 
         // Backbone.View constructor override:
         // sets up binding controls around call to super.
@@ -1132,26 +1116,10 @@
         // unbinds the view before performing native removal tasks.
         remove: function() {
             this.removeBindings();
-
-            // Sims-2686: A hack that will keep me up at night, but is needed to prevent looping.  The
-            //  _super was going to layoutmanager, which in turn calls back to this remove, so I've replaced
-            //  it with the lines from the actual Backbone.View.remove, since that's the one we need.
-            //  -Dimitri
-            this.$el.remove();
-            this.stopListening();
-            // _super(this, 'remove', arguments);
+            _super(this, 'remove', arguments);
         }
 
-    };
-
-    Epoxy.RebaseView = function( BackboneSuper ) {
-        if ( new BackboneSuper() instanceof Backbone.View ){
-            viewProto._super = BackboneSuper;
-            return BackboneSuper.extend( viewProto, mixins);
-        }
-    }
-
-    Epoxy.View = Epoxy.RebaseView( Backbone.View );
+    }, mixins);
 
     // Epoxy.View -> Private
     // ---------------------
@@ -1318,16 +1286,16 @@
     // @param context:
     // @param bindings:
     function EpoxyBinding(view, $element, handler, accessor, events, context, bindings) {
-        this._cid = Epoxy._uid++;
+
         var self = this;
         var tag = ($element[0].tagName).toLowerCase();
-        var changable = (tag == 'input' || tag == 'select' || tag == 'textarea' || tag == 'a' || $element.prop('contenteditable') == 'true');
+        var changable = (tag == 'input' || tag == 'select' || tag == 'textarea' || $element.prop('contenteditable') == 'true');
         var triggers = [];
         var reset = function(target) {
             self.set(self.$el, readAccessor(accessor), target);
         };
 
-        self.view = view;
+    self.view = view;
         self.$el = $element;
         self.evt = events;
         _.extend(self, handler);
